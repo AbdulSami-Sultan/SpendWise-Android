@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Expense": {
+      "title": "Expense",
+      "description": "A recorded expense transaction",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who owns the expense" },
+        "title": { "type": "string", "description": "Title or short description of the expense" },
+        "amount": { "type": "number", "description": "Amount spent in positive decimal value" },
+        "category": { "type": "string", "description": "Expense category e.g. Food, Transport" },
+        "date": { "type": "string", "description": "Transaction date in YYYY-MM-DD format" },
+        "notes": { "type": "string", "description": "Optional notes regarding the expense" },
+        "paymentMethod": { "type": "string", "description": "Payment method used" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp; clients must submit FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp; clients must submit FieldValue.serverTimestamp()" }
+      },
+      "required": ["userId", "title", "amount", "category", "date", "createdAt"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Monthly budget limit by category or overall",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the owner" },
+        "category": { "type": "string", "description": "Category name or Overall" },
+        "monthlyLimit": { "type": "number", "description": "Monthly spending limit" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp; clients must submit FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp; clients must submit FieldValue.serverTimestamp()" }
+      },
+      "required": ["userId", "category", "monthlyLimit", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": { "$ref": "entities/Expense" },
+      "description": "Collection of user expenses"
+    },
+    "/users/{userId}/budgets/{budgetId}": {
+      "schema": { "$ref": "entities/Budget" },
+      "description": "Collection of category spending budgets"
+    }
+  }
+}
