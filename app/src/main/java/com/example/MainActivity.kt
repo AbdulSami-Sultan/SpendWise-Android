@@ -1,5 +1,6 @@
 package com.example
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -41,11 +43,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppContent() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("spendwise_prefs", Context.MODE_PRIVATE) }
+    var isGuestMode by remember { mutableStateOf(prefs.getBoolean("is_guest_mode", false)) }
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             currentUser = auth.currentUser
+            if (auth.currentUser != null) {
+                isGuestMode = false
+                prefs.edit().putBoolean("is_guest_mode", false).apply()
+            }
         }
         Firebase.auth.addAuthStateListener(listener)
         onDispose {
@@ -53,15 +62,23 @@ fun AppContent() {
         }
     }
 
-    if (currentUser == null) {
+    if (currentUser == null && !isGuestMode) {
         AuthScreen(
-            onAuthSuccess = { currentUser = Firebase.auth.currentUser }
+            onAuthSuccess = {
+                currentUser = Firebase.auth.currentUser
+                isGuestMode = false
+                prefs.edit().putBoolean("is_guest_mode", false).apply()
+            },
+            onContinueAsGuest = {
+                isGuestMode = true
+                prefs.edit().putBoolean("is_guest_mode", true).apply()
+            }
         )
     } else {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val repository = remember(currentUser?.uid) { ExpenseRepository(context) }
+        val isGuest = currentUser == null
+        val repository = remember(currentUser?.uid, isGuest) { ExpenseRepository(context, isGuest = isGuest) }
         val viewModel: ExpenseViewModel = viewModel(
-            key = currentUser?.uid,
+            key = if (isGuest) "guest_session" else currentUser?.uid,
             factory = object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -71,7 +88,16 @@ fun AppContent() {
         )
         MainScreen(
             viewModel = viewModel,
-            onSignOut = { currentUser = null }
+            isGuest = isGuest,
+            onSignOut = {
+                currentUser = null
+                isGuestMode = false
+                prefs.edit().putBoolean("is_guest_mode", false).apply()
+            },
+            onSignInClick = {
+                isGuestMode = false
+                prefs.edit().putBoolean("is_guest_mode", false).apply()
+            }
         )
     }
 }

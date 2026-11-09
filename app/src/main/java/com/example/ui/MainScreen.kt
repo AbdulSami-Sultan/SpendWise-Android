@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,7 +92,9 @@ import java.util.Locale
 @Composable
 fun MainScreen(
     viewModel: ExpenseViewModel,
-    onSignOut: () -> Unit
+    isGuest: Boolean = false,
+    onSignOut: () -> Unit,
+    onSignInClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -120,14 +124,14 @@ fun MainScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            color = if (isGuest) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = userDisplayName.take(1).uppercase(),
+                                    text = if (isGuest) "G" else userDisplayName.take(1).uppercase(),
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    color = if (isGuest) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                         }
@@ -139,7 +143,7 @@ fun MainScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Hi, $userDisplayName",
+                                text = if (isGuest) "Guest Mode (Offline)" else "Hi, $userDisplayName",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -147,15 +151,37 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    if (isGuest) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { onSignInClick() }
+                                .padding(end = 4.dp)
+                                .testTag("top_sign_in_button")
+                        ) {
+                            Text(
+                                text = "Sign In",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = {
-                            signOut(context, credentialManager, onSignOut, coroutineScope)
+                            if (isGuest) {
+                                onSignOut()
+                            } else {
+                                signOut(context, credentialManager, onSignOut, coroutineScope)
+                            }
                         },
                         modifier = Modifier.testTag("sign_out_button")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Sign Out"
+                            contentDescription = if (isGuest) "Exit Guest Mode" else "Sign Out"
                         )
                     }
                 },
@@ -219,13 +245,15 @@ fun MainScreen(
                 when (selectedTab) {
                     0 -> DashboardTab(
                         uiState = uiState,
+                        isGuest = isGuest,
                         onTimeFilterSelected = { viewModel.setTimeFilter(it) },
                         onEditExpense = {
                             editingExpense = it
                             isAddExpenseOpen = true
                         },
                         onDeleteExpense = { viewModel.deleteExpense(it) },
-                        onViewAllTransactions = { selectedTab = 1 }
+                        onViewAllTransactions = { selectedTab = 1 },
+                        onSignInClick = onSignInClick
                     )
                     1 -> TransactionsTab(
                         uiState = uiState,
@@ -286,10 +314,12 @@ fun MainScreen(
 @Composable
 private fun DashboardTab(
     uiState: ExpenseUiState,
+    isGuest: Boolean = false,
     onTimeFilterSelected: (TimeFilter) -> Unit,
     onEditExpense: (Expense) -> Unit,
     onDeleteExpense: (String) -> Unit,
-    onViewAllTransactions: () -> Unit
+    onViewAllTransactions: () -> Unit,
+    onSignInClick: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier
@@ -298,6 +328,52 @@ private fun DashboardTab(
         contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (isGuest) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("guest_sync_banner"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Guest Mode Active",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Your data is stored locally. Sign in with Google to backup and sync across devices.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Button(
+                            onClick = onSignInClick,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            modifier = Modifier.testTag("banner_sign_in_button")
+                        ) {
+                            Text("Sign In")
+                        }
+                    }
+                }
+            }
+        }
+
         // Time Period Filter Chips
         item {
             LazyRow(
