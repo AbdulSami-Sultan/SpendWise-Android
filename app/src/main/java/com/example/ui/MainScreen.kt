@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DateRange
@@ -32,6 +34,8 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -43,6 +47,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -52,12 +57,14 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -253,7 +260,11 @@ fun MainScreen(
                         },
                         onDeleteExpense = { viewModel.deleteExpense(it) },
                         onViewAllTransactions = { selectedTab = 1 },
-                        onSignInClick = onSignInClick
+                        onSignInClick = onSignInClick,
+                        onAddExpenseClick = {
+                            editingExpense = null
+                            isAddExpenseOpen = true
+                        }
                     )
                     1 -> TransactionsTab(
                         uiState = uiState,
@@ -319,7 +330,8 @@ private fun DashboardTab(
     onEditExpense: (Expense) -> Unit,
     onDeleteExpense: (String) -> Unit,
     onViewAllTransactions: () -> Unit,
-    onSignInClick: () -> Unit = {}
+    onSignInClick: () -> Unit = {},
+    onAddExpenseClick: () -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier
@@ -394,79 +406,302 @@ private fun DashboardTab(
             }
         }
 
-        // Summary Metric Card
+        // Current Balance Card
         item {
+            val totalBudget = if (uiState.budgets.isNotEmpty()) {
+                uiState.budgets.sumOf { it.monthlyLimit }
+            } else {
+                3000.0 // Default reference target budget
+            }
+            val totalSpent = uiState.analysis.totalSpentInPeriod
+            val currentBalance = totalBudget - totalSpent
+            val isPositive = currentBalance >= 0.0
+            val progress = if (totalBudget > 0.0) {
+                (totalSpent / totalBudget).toFloat().coerceIn(0f, 1f)
+            } else 0f
+            val percentRemaining = if (totalBudget > 0.0) {
+                (((totalBudget - totalSpent) / totalBudget) * 100).toInt().coerceAtLeast(0)
+            } else 0
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("dashboard_total_card"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                    .testTag("current_balance_card"),
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp)
                 ) {
-                    Text(
-                        text = "Total Spending (${uiState.selectedFilter.label})",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "$${String.format(Locale.US, "%.2f", uiState.analysis.totalSpentInPeriod)}",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
+                    // Header Row: Wallet icon, "Current Balance", and Status Badge
                     Row(
                         modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.AccountBalanceWallet,
+                                        contentDescription = "Wallet Icon",
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Current Balance",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Remaining in ${uiState.selectedFilter.label}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isPositive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.errorContainer
+                        ) {
                             Text(
-                                text = "Daily Avg",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = "$${String.format(Locale.US, "%.2f", uiState.analysis.dailyAverage)}",
-                                style = MaterialTheme.typography.titleSmall,
+                                text = if (isPositive) "$percentRemaining% Left" else "Over Budget",
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = if (isPositive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
-                        Column {
-                            Text(
-                                text = "Top Category",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = uiState.analysis.topCategory,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Main Balance Text
+                    Text(
+                        text = "$${String.format(Locale.US, "%,.2f", currentBalance)}",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isPositive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("current_balance_text")
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Progress bar
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = if (progress >= 1f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Comparison row: Total Spent & Target Budget
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TrendingDown,
+                                    contentDescription = "Spent",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = "Total Spent",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "$${String.format(Locale.US, "%.2f", totalSpent)}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
                         }
-                        Column {
-                            Text(
-                                text = "Transactions",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                            )
-                            Text(
-                                text = "${uiState.analysis.transactionCount}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TrendingUp,
+                                    contentDescription = "Budget",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = "Target Budget",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "$${String.format(Locale.US, "%.2f", totalBudget)}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
                         }
+                    }
+                }
+            }
+        }
+
+        // Recent Transactions Section
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("recent_transactions_section"),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Recent Transactions",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (uiState.expenses.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = "${uiState.expenses.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    TextButton(
+                        onClick = { onViewAllTransactions() },
+                        modifier = Modifier.testTag("view_all_transactions_button")
+                    ) {
+                        Text(
+                            text = "View All",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                if (uiState.expenses.isEmpty()) {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(50.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Receipt,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "No recent transactions",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Add an expense to start tracking your daily spending habits.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                            )
+                            Button(
+                                onClick = onAddExpenseClick,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.testTag("empty_add_expense_button")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Add Expense")
+                            }
+                        }
+                    }
+                } else {
+                    uiState.expenses.take(5).forEach { expense ->
+                        ExpenseItemCard(
+                            expense = expense,
+                            onEdit = onEditExpense,
+                            onDelete = onDeleteExpense
+                        )
                     }
                 }
             }
@@ -488,68 +723,6 @@ private fun DashboardTab(
         // Spending Habits Insights
         item {
             SpendingHabitsInsightsCard(analysis = uiState.analysis)
-        }
-
-        // Recent Expenses Header
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Recent Transactions",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "See all (${uiState.expenses.size})",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { onViewAllTransactions() }
-                )
-            }
-        }
-
-        // Recent Expense items (first 5)
-        if (uiState.expenses.isEmpty()) {
-            item {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "No expenses recorded for this period",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Tap '+ Add Expense' below to log your first transaction!",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-            }
-        } else {
-            items(uiState.expenses.take(5), key = { it.id }) { expense ->
-                ExpenseItemCard(
-                    expense = expense,
-                    onEdit = onEditExpense,
-                    onDelete = onDeleteExpense
-                )
-            }
         }
     }
 }
